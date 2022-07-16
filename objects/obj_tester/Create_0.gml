@@ -12,7 +12,13 @@ var scopes = [
 	twitch_scope().channel.manage.predictions,
 	twitch_scope().bits.read,
 ];
-twitch.init("8frcw33ljvyab3t32ep2mwr7bc2bb0","xm1dkcyiwsk95m9t43we9qfi2ipcl5",scopes,3000);
+
+var buff = buffer_load("./keys.json");
+var keys = json_parse(buffer_read(buff,buffer_text));
+var client_id = keys.client_id;
+var client_secret = keys.client_secret;
+
+twitch.init(client_id,client_secret,scopes,3000);
 
 
 state = "start";
