@@ -100,13 +100,14 @@ function Twitch() constructor {
 		description: "",
 		display_name:"",
 		email: "",
-		id:"",
+		id:0,
 		login:"",
 		profile_image_url:"",
 		type: "",
 		view_count: 0,
 	};
 	polls = [];
+	goals = [];
 	save_token_fn = undefined;
 	load_token_fn = undefined;
 	function init(_client_id,_client_secret,_scopes,_port=3000) {
@@ -169,7 +170,7 @@ function Twitch() constructor {
 			get_user_data(options.callback);
 		});
 	}
-	function get_user_data(cb){
+	function get_user_data(cb=function(){}){
 		var options = {
 			headers: api_headers(),
 			callback:cb,
@@ -190,6 +191,129 @@ function Twitch() constructor {
 				user_data.type = result.type;
 				user_data.view_count = result.view_count;
 				options.callback(user_data);
+			}
+		});
+	}
+	function update_user(new_data={},cb=function(){}) {
+		var query = qs_encode(new_data);
+		var options = {
+			headers: api_headers(),
+			keep_header_map: false,
+			callback: cb,
+		};
+		http("https://api.twitch.tv/helix/users" + "?" + query,"PUT","",options,function(status,result,options){
+			if (status == 200) {
+				
+				options.callback();	
+			}
+		});
+	}
+	function get_user_followers(user_id=user_data.id,cb=function(){}) {
+		// Gets all users that *follow* a channel
+		// Has pagination. Needs handling. 
+		
+		var query = qs_encode({
+			to_id: user_id
+		})
+		var options = {
+			headers: api_headers(),
+			keep_header_map: false,
+			callback: cb,
+		}
+		http("https://api.twitch.tv/helix/users/follows" + "?" + query,"GET","",options,function(status,result,options){
+			result = json_parse(result);
+			if (status == 200) { 
+				options.callback(result);
+			}
+		});
+	}
+	function get_user_follow(user_id=user_data.id,cb=function(){}) {
+		// Gets all channels that a single user follows
+		// Has pagination. Needs handling. 
+		
+		var query = qs_encode({
+			from_id: user_id
+		})
+		var options = {
+			headers: api_headers(),
+			keep_header_map: false,
+			callback: cb,
+		}
+		http("https://api.twitch.tv/helix/users/follows" + "?" + query,"GET","",options,function(status,result,options){
+			result = json_parse(result);
+			if (status == 200) { 
+				options.callback(result);
+			}
+		});
+	}
+	function get_user_blocklist(cb) {
+		var query = qs_encode({
+			broadcaster_id: user_data.id,
+		});
+		var options = {
+			headers: api_headers(),
+			keep_header_map: false,
+			callback: cb,
+		}
+		http("https://api.twitch.tv/helix/users/blocks" + "?" + query,"GET","",function(status,result,options){
+			result = json_parse(result);
+			if (status == 200) {
+				options.callback(result);
+			}
+		});
+	}
+	function block_user(user_id,reason="",source_context="",cb=function(){}) {
+		
+		var query = {
+			target_user_id: user_id
+		}
+		if (array_pos(["spam","harassment","other"],reason) == -1) {
+			query.reason = reason;
+		}
+		if (array_pos(["whisper","chat",],source_context) == -1) {
+			query.source_context = source_context;
+		}
+		// feather ignore once GM1043
+		query = qs_encode(query);
+		var options = {
+			headers: api_headers(),
+			keep_header_map: false,
+			callback: cb,
+		};
+		// feather ignore once GM1009
+		http("https://api.twitch.tv/helix/users/blocks" + "?" + query,"PUT","",options,function(status,result,options){
+			// returns 204 on success - there is no result
+			if (status == 204) {
+				options.callback();	
+			}
+		});
+	}
+	function block_user(user_id,reason="",source_context="",cb=function(){}) {
+		var query = qs_encode({
+			target_user_id: user_id
+		});
+		var options = {
+			headers: api_headers(),
+			keep_header_map: false,
+			callback: cb,
+		};
+		http("https://api.twitch.tv/helix/users/blocks" + "?" + query,"DELETE","",options,function(status,result,options){
+			// returns 204 on success - there is no result
+			if (status == 204) {
+				options.callback();	
+			}
+		});
+	}
+	function get_user_extensions(cb=function(){}) {
+		var options = {
+			headers: api_headers(),
+			keep_header_map: false,
+			callback: cb,
+		}
+		http("https://api.twitch.tv/helix/users/extensions/list","GET","",options,function(status,result,options){
+			result = json_parse(result);
+			if (status == 200) {
+				options.callback(result.data);
 			}
 		});
 	}
@@ -282,7 +406,7 @@ function Twitch() constructor {
 	}
 	
 	function get_polls(cb=function(){},after=0,num=0) {
-		var query= qs_encode({
+		var query = qs_encode({
 			broadcaster_id: user_data.id,
 			after: after,
 			first: num,
@@ -293,7 +417,7 @@ function Twitch() constructor {
 			callback: cb,
 		}
 		
-		http("https://api.twitch.tv/helix/polls","GET","",options,function(status,result,options){
+		http("https://api.twitch.tv/helix/polls" + "?" + query,"GET","",options,function(status,result,options){
 			result = json_parse(result);
 			if (status == 200) {
 				var found_polls = [];
@@ -302,18 +426,54 @@ function Twitch() constructor {
 					for (var j=0;j<array_length(polls);j++) {
 						if (result.data[i].id == polls[j].id) {
 							ind = j;
+							break;
 						}
 					}
 					if (ind == -1) {
 						array_push(polls,new TwitchPoll(result.data[i],self));
 					} else {
-						polls[i].update_choices(result.data[i].choices)	
+						polls[i].update_choices(result.data[i].choices);
 					}
 				}
 				options.callback(polls);
 			}
 		});
+		
+	function get_goals(cb) {
+		var query = qs_encode({
+			broadcaster_id: user_data.id,
+		});
+		var options = {
+			headers: api_headers(),
+			keep_header_map:false,
+			callback: cb,
+		};
+		http("https://api.twitch.tv/helix/goals"+"?"+query,"GET","",options,function(status,result,options){
+			result = json_parse(result);
+			if (status == 200) {
+				var found_goals = [];
+				for (var i=0;i<array_length(result.data);i++) {
+					var ind = -1;
+					for (var j=0;j<array_length(goals);j++) {
+						if (result.data[i].id == goals[j].id) {
+							ind = j;
+							break;
+						}
+					}
+					if (ind == -1) {
+						// feather ignore once GM1058
+						array_push(goals,new TwitchGoal(result.data[i],self));
+					} else {
+						goals[ind].type = result.data[i].type;
+						goals[ind].description = result.data[i].description;
+						goals[ind].current_amount = result.data[i].current_amount;
+						goals[ind].target_amount = result.data[i].target_amount;
+					}
+				}
+			}
+		});
 	}
+	
 }
 
 /// @param data Struct
@@ -364,7 +524,7 @@ function TwitchPoll(data,parent) constructor {
 		var options = {
 			headers: client.api_headers(),
 			keep_header_map: false,
-		}
+		};
 		http("https://api.twitch.tv/helix/polls","PATCH",body,function(status,result,options){
 			result = json_parse(result);
 			if (status == 200) {
@@ -384,7 +544,7 @@ function TwitchPoll(data,parent) constructor {
 		var options = {
 			headers: client.api_headers(),
 			keep_header_map: false,
-		}
+		};
 		http("https://api.twitch.tv/helix/polls","PATCH",body,function(status,result,options){
 			result = json_parse(result);
 			if (status == 200) {
@@ -403,7 +563,7 @@ function TwitchPoll(data,parent) constructor {
 		var options = {
 			headers: client.api_headers(),
 			keep_header_map: false,
-		}
+		};
 		http("https://api.twitch.tv/helix/polls"+"?"+query,"GET",function(status,result,options){
 			result = json_parse(result);
 			if (status == 200) {
@@ -415,6 +575,17 @@ function TwitchPoll(data,parent) constructor {
 	}
 }
 
-
+/// @param data Struct
+/// @param parent Struct.Twitch
+function TwitchGoal(data,parent) constructor {
+	// feather ignore once GM1008
+	id = data.id;
+	type = data.type;
+	description = data.description;
+	current_amount = data.current_amount;
+	target_amount = data.target_amount;
+	created_at = data.created_at;
+	client = parent;
+}
 
 

@@ -19,3 +19,10 @@ function array_indexof(array,fn) {
 	}
 	return -1;
 }
+
+function array_pos(array,item) {
+	for (var i=0;i<array_length(array);i++) {
+		if (array[i] == item) return i;
+	}
+	return -1;
+}
